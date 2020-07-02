@@ -1834,7 +1834,7 @@ void bta_av_conn_failed(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
  ******************************************************************************/
 void bta_av_do_start(tBTA_AV_SCB* p_scb, tBTA_AV_DATA* p_data) {
   uint8_t clear_policy = 0;
-  uint8_t cur_role;
+  uint8_t cur_role = BTM_ROLE_UNDEFINED;
 
   LOG_INFO(LOG_TAG,
            "%s: peer %s sco_occupied:%s role:0x%x started:%s wait:0x%x",

@@ -3774,6 +3774,7 @@ void btm_sec_auth_complete(uint16_t handle, uint8_t status) {
   tBTM_PAIRING_STATE old_state = btm_cb.pairing_state;
   tBTM_SEC_DEV_REC* p_dev_rec = btm_find_dev_by_handle(handle);
   bool are_bonding = false;
+  bool is_originator = false;
 
   if (p_dev_rec) {
     VLOG(2) << __func__ << ": Security Manager: in state: "
@@ -3815,9 +3816,11 @@ void btm_sec_auth_complete(uint16_t handle, uint8_t status) {
   if (!p_dev_rec) return;
 
   if ((btm_cb.pairing_state != BTM_PAIR_STATE_IDLE) &&
-      (btm_cb.pairing_flags & BTM_PAIR_FLAGS_WE_STARTED_DD) &&
-      (p_dev_rec->bd_addr == btm_cb.pairing_bda))
+      (p_dev_rec->bd_addr == btm_cb.pairing_bda)) {
     are_bonding = true;
+    if (btm_cb.pairing_flags & BTM_PAIR_FLAGS_WE_STARTED_DD)
+      is_originator = true;
+  }
 
   if ((btm_cb.pairing_state != BTM_PAIR_STATE_IDLE) &&
       (p_dev_rec->bd_addr == btm_cb.pairing_bda))
@@ -3857,7 +3860,7 @@ void btm_sec_auth_complete(uint16_t handle, uint8_t status) {
   p_dev_rec->sec_state = BTM_SEC_STATE_IDLE;
 
   /* If this is a bonding procedure can disconnect the link now */
-  if (are_bonding) {
+  if (are_bonding && is_originator) {
     p_dev_rec->security_required &= ~BTM_SEC_OUT_AUTHENTICATE;
 
     if (status != HCI_SUCCESS) {
@@ -3895,6 +3898,10 @@ void btm_sec_auth_complete(uint16_t handle, uint8_t status) {
     btm_sec_dev_rec_cback_event(p_dev_rec, BTM_ERR_PROCESSING, false);
 
     if (btm_cb.pairing_flags & BTM_PAIR_FLAGS_DISC_WHEN_DONE) {
+      btm_sec_send_hci_disconnect(p_dev_rec, HCI_ERR_AUTH_FAILURE,
+                                  p_dev_rec->hci_handle);
+    } else if (are_bonding && !is_originator &&
+               !l2cu_is_active_ccb_connected(p_dev_rec->bd_addr)) {
       btm_sec_send_hci_disconnect(p_dev_rec, HCI_ERR_AUTH_FAILURE,
                                   p_dev_rec->hci_handle);
     }
