@@ -59,7 +59,7 @@ using bluetooth::common::MessageLoopThread;
 using bluetooth::common::OnceTimer;
 
 extern void hci_initialize();
-extern void hci_transmit(BT_HDR* packet);
+extern bool hci_transmit(BT_HDR* packet);
 extern void hci_close();
 extern int hci_open_firmware_log_file();
 extern void hci_close_firmware_log_file(int fd);
@@ -420,7 +420,12 @@ static void transmit_fragment(BT_HDR* packet, bool send_transmit_finished) {
       (packet->event & MSG_EVT_MASK) != MSG_STACK_TO_HC_HCI_CMD &&
       send_transmit_finished;
 
-  hci_transmit(packet);
+  if(!hci_transmit(packet)) {
+    LOG_ERROR(LOG_TAG, "%s: unable to send packet to hci hal daemon ", __func__);
+    usleep(100000);
+    LOG_ERROR(LOG_TAG, "%s: Killing bluetooth process due to TX failed ", __func__);
+    kill(getpid(), SIGKILL);
+  }
 
   if (free_after_transmit) {
     buffer_allocator->free(packet);
@@ -739,11 +744,12 @@ static waiting_command_t* get_waiting_command(command_opcode_t opcode) {
 
     if (wait_entry && (wait_entry->opcode != opcode) &&
         (((wait_entry->opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC) &&
-        ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC))) {
-        LOG_DEBUG(LOG_TAG,"%s VS event found treat it as valid 0x%x", __func__, opcode);
-    }
-    else {
-        continue;
+        (((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC) ||
+            opcode == 0))) {
+      LOG_DEBUG(LOG_TAG,"%s Treat it as valid, wait_entry opcode 0x%x opcode 0x%x",
+                __func__, wait_entry->opcode, opcode);
+    } else {
+      continue;
     }
 
     list_remove(commands_pending_response, wait_entry);
